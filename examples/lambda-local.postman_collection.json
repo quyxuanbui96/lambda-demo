@@ -1,0 +1,148 @@
+{
+  "info": {
+    "name": "Lambda CSV - Local",
+    "description": "Run requests in order: create upload URL, upload sample CSV to real AWS S3, import CSV using the local API. Keep yarn run:local running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:3000/local",
+      "type": "string"
+    },
+    {
+      "key": "upload_url",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "csv_key",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Create upload URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    pm.collectionVariables.set(\"upload_url\", data.upload_url);",
+              "    pm.collectionVariables.set(\"csv_key\", data.key);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_name\": \"orders.csv\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/csv/upload-url"
+      }
+    },
+    {
+      "name": "2. Upload sample CSV to S3",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"S3 upload HTTP 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "text/csv"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "id,name,quantity\n001,Apple,10\n002,Orange,5\n",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": "{{upload_url}}",
+        "description": "Uploads two sample rows to the real S3 bucket. No Authorization header is needed: the URL is presigned. To use your own CSV, choose Body > binary and select your file, keeping Content-Type: text/csv."
+      }
+    },
+    {
+      "name": "3. Import CSV",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "if (pm.response.code === 200) {",
+              "    pm.test(\"Sample CSV: 2 valid rows\", function () {",
+              "        const data = pm.response.json();",
+              "        pm.expect(data.total_rows).to.eql(2);",
+              "        pm.expect(data.valid_rows).to.eql(2);",
+              "        pm.expect(data.invalid_rows).to.eql(0);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"key\": \"{{csv_key}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/csv/import"
+      }
+    }
+  ]
+}

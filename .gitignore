@@ -1,0 +1,30 @@
+# Node / Serverless
+node_modules/
+.serverless/
+.requirements/
+.requirements.zip
+.yarn/*
+!.yarn/releases
+.pnp.*
+
+# Python
+.venv/
+.tools/
+.poetry/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Env / credentials (never commit)
+.env
+.env.*
+!.env.example
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/

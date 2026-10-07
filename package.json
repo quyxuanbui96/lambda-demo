@@ -1,0 +1,31 @@
+{
+  "name": "csv-lambda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CSV input processing on AWS Lambda (Serverless Framework v3 + Python 3.11)",
+  "engines": {
+    "node": "22.11.0",
+    "yarn": "4.6.0"
+  },
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "install:all": "yarn install && python -m poetry install",
+    "aws:login": "bash scripts/aws-login.sh",
+    "run:local": "python -m poetry run python scripts/run_local.py",
+    "invoke:s3": "python -m poetry run python scripts/invoke_local.py s3",
+    "invoke:api": "python -m poetry run python scripts/invoke_local.py api",
+    "test": "python -m poetry run pytest",
+    "lint": "python -m poetry run ruff check src tests scripts && python -m poetry run black --check src tests scripts",
+    "format": "python -m poetry run ruff check --fix src tests scripts && python -m poetry run black src tests scripts",
+    "typecheck": "python -m poetry run mypy",
+    "check-all": "yarn lint && yarn typecheck && yarn test",
+    "package:dev": "node scripts/deploy.cjs -Task package -Stage dev",
+    "deploy:dev": "node scripts/deploy.cjs -Task deploy -Stage dev",
+    "info:dev": "node scripts/deploy.cjs -Task info -Stage dev"
+  },
+  "devDependencies": {
+    "serverless": "3.40.0",
+    "serverless-offline": "13.9.0",
+    "serverless-python-requirements": "^6.1.0"
+  }
+}

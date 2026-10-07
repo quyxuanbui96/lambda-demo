@@ -1,0 +1,127 @@
+# ============================================================
+# CSV Lambda - Serverless Framework v3
+# ============================================================
+#
+# Stages:
+#   local : serverless-offline only (never deployed). API runs without API key.
+#   dev   : deployed to AWS. API requires an API key (x-api-key header).
+#
+# Local:
+#   yarn aws:login        # export SSO temp credentials to .env.aws (or use AWS_PROFILE)
+#   yarn run:local        # http://localhost:3000/local/csv/...
+#
+# Deploy:
+#   yarn deploy:dev
+#
+# NOTE: serverless-offline does not emulate S3 events.
+#       Use `yarn invoke:s3 --key <key>` to run the S3 handler locally.
+# ============================================================
+
+service: csv-lambda
+
+frameworkVersion: '3'
+
+useDotenv: true
+
+custom:
+  csvBucketName: ${env:CSV_BUCKET_NAME}
+  csvBucketExisting: ${strToBool(${env:CSV_BUCKET_EXISTING, 'false'})}
+  csvInputPrefix: ${env:CSV_INPUT_PREFIX, 'input/'}
+  # API key protection per stage (local runs without auth).
+  apiPrivateByStage:
+    local: false
+  apiPrivate: ${self:custom.apiPrivateByStage.${sls:stage}, true}
+
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    host: 127.0.0.1
+
+  pythonRequirements:
+    usePoetry: true
+    # Build Linux wheels (pydantic-core is a native extension) inside Docker on Windows/macOS.
+    dockerizePip: non-linux
+    dockerRunCmdExtraArgs: ${file(./scripts/deploy_config.cjs):dockerArgs}
+    slim: true
+    strip: false
+    requirePoetryLockFile: true
+
+provider:
+  name: aws
+  runtime: python3.11
+  architecture: x86_64
+  stage: ${opt:stage, 'local'}
+  region: ${opt:region, env:AWS_REGION, 'ap-northeast-1'}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 30
+  environment:
+    STAGE: ${sls:stage}
+    CSV_BUCKET_NAME: ${self:custom.csvBucketName}
+    CSV_INPUT_PREFIX: ${self:custom.csvInputPrefix}
+    CSV_ENCODING: ${env:CSV_ENCODING, 'utf-8-sig'}
+    CSV_MAX_BYTES: ${env:CSV_MAX_BYTES, '10485760'}
+    CSV_MAX_REPORTED_ERRORS: ${env:CSV_MAX_REPORTED_ERRORS, '100'}
+    PRESIGNED_URL_EXPIRES_SECONDS: ${env:PRESIGNED_URL_EXPIRES_SECONDS, '900'}
+    POWERTOOLS_SERVICE_NAME: csv-lambda
+    POWERTOOLS_LOG_LEVEL: ${env:LOG_LEVEL, 'INFO'}
+  apiGateway:
+    apiKeys:
+      - ${sls:stage}-csv-lambda-api-key
+  iam:
+    role:
+      statements:
+        # ListBucket lets S3 return 404 (instead of 403) for missing keys.
+        - Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource: arn:aws:s3:::${self:custom.csvBucketName}
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+          Resource: arn:aws:s3:::${self:custom.csvBucketName}/${self:custom.csvInputPrefix}*
+
+package:
+  patterns:
+    - '!**'
+    - 'src/**'
+    - '!**/__pycache__/**'
+
+functions:
+  csvS3Import:
+    handler: src/handlers/s3_csv_import.handler
+    description: Parse and validate CSV files uploaded to S3
+    memorySize: 1024
+    timeout: 300
+    events:
+      - s3:
+          bucket: ${self:custom.csvBucketName}
+          existing: ${self:custom.csvBucketExisting}
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: ${self:custom.csvInputPrefix}
+            - suffix: .csv
+
+  csvApi:
+    handler: src/handlers/api.handler
+    description: CSV HTTP API (presigned upload URL / synchronous import)
+    # API Gateway hard limit is 29s.
+    timeout: 29
+    events:
+      - http:
+          path: csv/upload-url
+          method: post
+          private: ${self:custom.apiPrivate}
+      - http:
+          path: csv/import
+          method: post
+          private: ${self:custom.apiPrivate}
+
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+  - ./scripts/normalize_package.cjs
+
+resources:
+  extensions: ${file(./scripts/deploy_config.cjs):extensions}
