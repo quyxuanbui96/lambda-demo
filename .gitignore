@@ -25,6 +25,10 @@ htmlcov/
 .env.*
 !.env.example
 
+# Local SSH keys
+/id_bxquy96
+/id_bxquy96.pub
+
 # OS / IDE
 .DS_Store
 Thumbs.db
