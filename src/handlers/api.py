@@ -13,7 +13,7 @@ import base64
 import binascii
 import uuid
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, TypeAlias, TypeVar
+from typing import TYPE_CHECKING
 
 from aws_lambda_powertools import Logger
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -33,8 +33,7 @@ logger = Logger()
 
 CSV_CONTENT_TYPE = "text/csv"
 
-RequestT = TypeVar("RequestT", bound=BaseModel)
-RouteHandler: TypeAlias = "Callable[[Mapping[str, object], Settings, S3Client], dict[str, object]]"
+type RouteHandler = Callable[[Mapping[str, object], Settings, S3Client], dict[str, object]]
 
 
 class UploadUrlRequest(BaseModel):
@@ -62,7 +61,9 @@ class ImportRequest(BaseModel):
     key: str = Field(min_length=1, max_length=1024)
 
 
-def _parse_body(event: Mapping[str, object], model: type[RequestT]) -> RequestT:
+def _parse_body[RequestT: BaseModel](
+    event: Mapping[str, object], model: type[RequestT]
+) -> RequestT:
     body = event.get("body")
     if body is None or body == "":
         raise RequestValidationError("Request body is required")

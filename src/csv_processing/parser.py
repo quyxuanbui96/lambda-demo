@@ -10,7 +10,6 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -19,11 +18,9 @@ from src.common.exceptions import CsvFormatError
 from src.common.validation import format_validation_errors
 from src.csv_processing.models import FieldError, RowError
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
-
 
 @dataclass(frozen=True)
-class ParsedCsv(Generic[ModelT]):
+class ParsedCsv[ModelT: BaseModel]:
     header: list[str]
     records: list[ModelT]
     row_errors: list[RowError]
@@ -33,7 +30,9 @@ class ParsedCsv(Generic[ModelT]):
         return len(self.records) + len(self.row_errors)
 
 
-def parse_csv(data: bytes, model: type[ModelT], *, encoding: CsvEncoding) -> ParsedCsv[ModelT]:
+def parse_csv[ModelT: BaseModel](
+    data: bytes, model: type[ModelT], *, encoding: CsvEncoding
+) -> ParsedCsv[ModelT]:
     if not data.strip():
         raise CsvFormatError("CSV file is empty")
 

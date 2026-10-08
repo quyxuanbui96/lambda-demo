@@ -32,7 +32,8 @@ try {
         $env:PIP_CERT = $env:AWS_CA_BUNDLE
     }
     $taskRegion = if ($env:AWS_REGION) { $env:AWS_REGION } else { 'ap-southeast-2' }
-    $taskServerless = Join-Path $taskProjectRoot 'node_modules\serverless\bin\serverless.js'
+    $env:DOCKER_DEFAULT_PLATFORM = 'linux/amd64'
+    $taskServerless = Join-Path $taskProjectRoot 'node_modules\serverless\run.js'
     if (-not (Test-Path -LiteralPath $taskServerless)) { throw 'Run yarn install first.' }
 
     if ($Task -eq 'info') {

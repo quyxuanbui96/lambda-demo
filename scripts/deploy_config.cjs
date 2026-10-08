@@ -13,7 +13,7 @@ module.exports.dockerArgs = () => {
   ];
 };
 
-// Serverless v3 generates an existing-bucket helper with deprecated Node.js 18.
+// Keep the existing-bucket notification helper on the chosen Node.js runtime.
 module.exports.extensions = () => process.env.CSV_BUCKET_EXISTING === 'true' ? {
   CustomDashresourceDashexistingDashs3LambdaFunction: {
     Properties: { Runtime: 'nodejs22.x' },

@@ -5,6 +5,7 @@ node_modules/
 .requirements.zip
 .yarn/*
 !.yarn/releases
+!.yarn/patches
 .pnp.*
 
 # Python

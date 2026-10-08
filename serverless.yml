@@ -1,10 +1,10 @@
 # ============================================================
-# CSV Lambda - Serverless Framework v3
+# CSV Lambda - Serverless Framework v4
 # ============================================================
 #
 # Stages:
 #   local : serverless-offline only (never deployed). API runs without API key.
-#   dev   : deployed to AWS. API requires an API key (x-api-key header).
+#   dev   : deployed to AWS. CSV API requires x-api-key; GET /health is public.
 #
 # Local:
 #   yarn aws:login        # export SSO temp credentials to .env.aws (or use AWS_PROFILE)
@@ -19,9 +19,7 @@
 
 service: csv-lambda
 
-frameworkVersion: '3'
-
-useDotenv: true
+frameworkVersion: '4.43.0'
 
 custom:
   csvBucketName: ${env:CSV_BUCKET_NAME}
@@ -39,8 +37,9 @@ custom:
 
   pythonRequirements:
     usePoetry: true
-    # Build Linux wheels (pydantic-core is a native extension) inside Docker on Windows/macOS.
-    dockerizePip: non-linux
+    # Always build Python 3.14/Linux x86_64 wheels, including on ARM64 hosts.
+    dockerizePip: true
+    dockerImage: public.ecr.aws/sam/build-python3.14:latest-x86_64
     dockerRunCmdExtraArgs: ${file(./scripts/deploy_config.cjs):dockerArgs}
     slim: true
     strip: false
@@ -48,7 +47,7 @@ custom:
 
 provider:
   name: aws
-  runtime: python3.11
+  runtime: python3.14
   architecture: x86_64
   stage: ${opt:stage, 'local'}
   region: ${opt:region, env:AWS_REGION, 'ap-northeast-1'}
@@ -86,9 +85,29 @@ package:
   patterns:
     - '!**'
     - 'src/**'
+    - '!src/handlers/health.py'
     - '!**/__pycache__/**'
 
 functions:
+  health:
+    handler: src/handlers/health.handler
+    description: Public liveness endpoint without third-party dependencies
+    memorySize: 128
+    timeout: 5
+    package:
+      individually: true
+      # Explicit file allowlist also enforced after v4's dependency injection.
+      patterns:
+        - '!src/**'
+        - 'src/__init__.py'
+        - 'src/handlers/__init__.py'
+        - 'src/handlers/health.py'
+    events:
+      - http:
+          path: health
+          method: get
+          private: false
+
   csvS3Import:
     handler: src/handlers/s3_csv_import.handler
     description: Parse and validate CSV files uploaded to S3
@@ -119,7 +138,6 @@ functions:
           private: ${self:custom.apiPrivate}
 
 plugins:
-  - serverless-python-requirements
   - serverless-offline
   - ./scripts/normalize_package.cjs
 

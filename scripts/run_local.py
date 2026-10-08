@@ -26,7 +26,7 @@ def main() -> int:
         return 1
 
     node = shutil.which("node")
-    serverless = ROOT / "node_modules" / "serverless" / "bin" / "serverless.js"
+    serverless = ROOT / "node_modules" / "serverless" / "run.js"
     if not node or not serverless.is_file():
         print("ERROR: Node.js / Serverless not found. Run 'yarn install' first.", file=sys.stderr)
         return 1

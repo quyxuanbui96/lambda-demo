@@ -2,12 +2,12 @@
   "name": "csv-lambda",
   "version": "0.1.0",
   "private": true,
-  "description": "CSV input processing on AWS Lambda (Serverless Framework v3 + Python 3.11)",
+  "description": "CSV input processing on AWS Lambda (Serverless Framework v4 + Python 3.14)",
   "engines": {
     "node": "22.11.0",
-    "yarn": "4.6.0"
+    "yarn": "4.18.1"
   },
-  "packageManager": "yarn@4.6.0",
+  "packageManager": "yarn@4.18.1",
   "scripts": {
     "install:all": "yarn install && python -m poetry install",
     "aws:login": "bash scripts/aws-login.sh",
@@ -24,8 +24,7 @@
     "info:dev": "node scripts/deploy.cjs -Task info -Stage dev"
   },
   "devDependencies": {
-    "serverless": "3.40.0",
-    "serverless-offline": "13.9.0",
-    "serverless-python-requirements": "^6.1.0"
+    "serverless": "4.43.0",
+    "serverless-offline": "patch:serverless-offline@npm%3A14.8.3#~/.yarn/patches/serverless-offline-npm-14.8.3-2e16c37d07.patch"
   }
 }
