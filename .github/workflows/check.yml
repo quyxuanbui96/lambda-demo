@@ -1,0 +1,52 @@
+name: Workflow checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: workflow_test
+          POSTGRES_USER: workflow_test
+          POSTGRES_PASSWORD: local-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          yarn install --immutable
+          python -m pip install poetry==2.5.1
+          python -m poetry install
+      - name: Lint, typecheck and all unit tests
+        run: yarn check-all
+      - name: PostgreSQL workflow tests and coverage
+        env:
+          TEST_WORKFLOW_POSTGRES_URL: postgresql+psycopg://workflow_test:local-test-only@127.0.0.1:5432/workflow_test
+        run: yarn workflow:test
+      - name: HTTP/S3/SQS local integration
+        run: python -m poetry run pytest tests/integration -m integration
+      - name: Draft OpenAPI and migration consistency
+        run: |
+          python -m poetry run python scripts/workflow_openapi.py
+          python -m poetry run python scripts/workflow_migrate.py --export-sql
+          git diff --exit-code -- docs/openapi.workflow.json migrations

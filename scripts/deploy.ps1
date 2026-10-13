@@ -2,7 +2,9 @@ param(
     [ValidateSet('package', 'deploy', 'info')]
     [string]$Task = 'deploy',
     [ValidatePattern('^[a-zA-Z0-9-]+$')]
-    [string]$Stage = 'dev'
+    [string]$Stage = 'dev',
+    [ValidateSet('serverless.yml', 'serverless.workflow.yml')]
+    [string]$Config = 'serverless.yml'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +21,7 @@ try {
     $env:PATH = "$taskPythonScripts$([IO.Path]::PathSeparator)$env:PATH"
 
     # Parse dotenv through Python; do not execute .env contents as shell code.
-    $taskEnvironmentJson = & python -m poetry run python -c "from scripts.local_env import load_local_environment; import os,json; load_local_environment(); print(json.dumps({k:v for k,v in os.environ.items() if k.startswith(('AWS_', 'CSV_', 'POWERTOOLS_')) or k in ('LOG_LEVEL','PRESIGNED_URL_EXPIRES_SECONDS')}))"
+    $taskEnvironmentJson = & python -m poetry run python -c "from scripts.local_env import load_local_environment; import os,json; load_local_environment(); print(json.dumps({k:v for k,v in os.environ.items() if k.startswith(('AWS_', 'CSV_', 'WF_', 'SERVERLESS_', 'POWERTOOLS_')) or k in ('LOG_LEVEL','PRESIGNED_URL_EXPIRES_SECONDS')}))"
     if ($LASTEXITCODE -ne 0) { throw 'Unable to load project environment. Run yarn install:all.' }
     $taskEnvironment = $taskEnvironmentJson | ConvertFrom-Json
     foreach ($taskProperty in $taskEnvironment.PSObject.Properties) {
@@ -33,11 +35,17 @@ try {
     }
     $taskRegion = if ($env:AWS_REGION) { $env:AWS_REGION } else { 'ap-southeast-2' }
     $env:DOCKER_DEFAULT_PLATFORM = 'linux/amd64'
+    if ($Config -eq 'serverless.workflow.yml' -and $Task -eq 'deploy') {
+        $env:STAGE = $Stage
+        & python -m poetry run python -c "from src.workflow.config import load_workflow_settings; load_workflow_settings()"
+        if ($LASTEXITCODE -ne 0) { throw 'Workflow configuration is incomplete.' }
+        if (-not $env:WF_VPC_SUBNET_IDS -or -not $env:WF_VPC_SECURITY_GROUP_IDS) { throw 'Configure workflow private-RDS VPC first.' }
+    }
     $taskServerless = Join-Path $taskProjectRoot 'node_modules\serverless\run.js'
     if (-not (Test-Path -LiteralPath $taskServerless)) { throw 'Run yarn install first.' }
 
     if ($Task -eq 'info') {
-        & node $taskServerless info --stage $Stage --region $taskRegion
+        & node $taskServerless info --config $Config --stage $Stage --region $taskRegion
         if ($LASTEXITCODE -ne 0) { throw 'Unable to read deployed service information.' }
         return
     }
@@ -47,11 +55,11 @@ try {
     & docker version --format '{{.Server.Version}}'
     if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop with the Linux engine before packaging.' }
 
-    & node $taskServerless package --stage $Stage --region $taskRegion
+    & node $taskServerless package --config $Config --stage $Stage --region $taskRegion
     if ($LASTEXITCODE -ne 0) { throw 'Packaging failed; deployment was not started.' }
 
     if ($Task -eq 'deploy') {
-        & node $taskServerless deploy --package .serverless --stage $Stage --region $taskRegion
+        & node $taskServerless deploy --config $Config --package .serverless --stage $Stage --region $taskRegion
         if ($LASTEXITCODE -ne 0) { throw 'AWS deployment failed. Check CloudFormation stack events.' }
     }
 } finally {

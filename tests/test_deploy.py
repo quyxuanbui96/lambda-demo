@@ -40,3 +40,16 @@ def test_packaging_failure_prevents_aws_deployment(
         deploy.deploy("deploy", "dev")
     assert any("package" in args for args in calls)
     assert not any("deploy" in args for args in calls)
+
+
+def test_workflow_deploy_requires_configuration_before_aws_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(deploy, "load_local_environment", lambda: None)
+
+    def unexpected_run(*args: object, **kwargs: object) -> None:
+        pytest.fail("Deployment must not start without workflow configuration")
+
+    monkeypatch.setattr(deploy.subprocess, "run", unexpected_run)
+    with pytest.raises(ValueError, match="Workflow configuration"):
+        deploy.deploy("deploy", "dev", "serverless.workflow.yml")

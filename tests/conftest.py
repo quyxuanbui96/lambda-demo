@@ -12,7 +12,7 @@ from moto import mock_aws
 BUCKET = "test-csv-bucket"
 REGION = "ap-northeast-1"
 
-_MANAGED_ENV_PREFIXES = ("AWS_", "CSV_")
+_MANAGED_ENV_PREFIXES = ("AWS_", "CSV_", "WF_")
 _MANAGED_ENV_NAMES = ("PRESIGNED_URL_EXPIRES_SECONDS",)
 
 

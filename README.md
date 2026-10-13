@@ -1,4 +1,9 @@
-# Lambda CSV processing service
+# Lambda backend
+
+Backend mới cho 8 API acquisition/transfer: [hướng dẫn chạy và tích hợp](docs/workflow.md),
+[OpenAPI draft](docs/openapi.workflow.json). Chạy demo bằng `yarn workflow:local`.
+
+## CSV demo ban đầu
 
 Service Python 3.14 xử lý CSV từ S3. Tương tự `uretailV2`, API và Lambda handler chạy
 trên máy bằng Serverless Offline, còn S3 sử dụng AWS thật qua IAM profile hoặc SSO. Chạy local không
@@ -196,3 +201,26 @@ bằng key `dev-csv-lambda-api-key`, rồi gửi lần lượt request 1, 2, 3.
 Nếu có file `.tools/deploy/aws-dev.postman_environment.json` do bước kiểm tra triển
 khai tạo ra, import file này và chọn environment tương ứng để nạp sẵn endpoint/key.
 File environment chứa API key nên chỉ giữ trên máy, không commit hoặc chia sẻ.
+
+
+<!-- Run local -->
+```
+source .tools/activate.sh
+yarn run:local
+```
+
+## Backend Acquisition/Transfer mới — 8 API
+
+Đã bổ sung service workflow dùng PostgreSQL, SQS worker/recovery và S3 version-pinned files.
+Auth tạm bypass bằng identity cấu hình sẵn theo yêu cầu; OCR adapter được tích hợp sau.
+Xem [hướng dẫn workflow](docs/workflow.md) và [OpenAPI draft](docs/openapi.workflow.json).
+
+```bash
+source .tools/activate.sh
+yarn install:all
+yarn workflow:local
+# Demo 8 API trên http://127.0.0.1:3000, dùng S3/SQS/DB giả lập; Ctrl+C để dừng.
+```
+
+`yarn workflow:package` build service mới; `yarn workflow:deploy` cần RDS Secret ARN,
+VPC/SG, migration và contract thật trước khi triển khai. Stack CSV demo cũ có lệnh riêng.

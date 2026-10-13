@@ -15,13 +15,18 @@ boto3 = "^1.35.0"
 pydantic = "^2.9.0"
 aws-lambda-powertools = "^3.0.0"
 
+[tool.poetry.group.workflow.dependencies]
+sqlalchemy = "^2.0"
+psycopg = { extras = ["binary"], version = "^3.2" }
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.1.1"
-moto = { extras = ["s3"], version = "^5.0.0" }
+moto = { extras = ["s3", "server"], version = "^5.0.0" }
+pytest-cov = "^7.0"
 black = "^26.10.0"
 ruff = "^0.16.10"
 mypy = "^2.4.0"
-boto3-stubs = { extras = ["s3"], version = "^1.35.0" }
+boto3-stubs = { extras = ["s3", "sqs", "secretsmanager"], version = "^1.35.0" }
 python-dotenv = "^1.0.1"
 
 [build-system]
@@ -34,7 +39,8 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not integration'"
+markers = ["integration: requires local HTTP sockets or a dedicated PostgreSQL test instance"]
 
 [tool.black]
 line-length = 100

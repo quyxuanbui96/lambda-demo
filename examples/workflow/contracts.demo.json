@@ -1,0 +1,22 @@
+[
+  {
+    "business_type": "DEMO",
+    "source_layout": {
+      "version": "demo-source-v1",
+      "columns": ["organizationId", "participantCode", "insuranceYear", "businessType", "id", "name", "quantity"],
+      "nonnegative_integer_columns": ["quantity"]
+    },
+    "generated_layout": {
+      "version": "demo-v1",
+      "columns": ["id", "name", "quantity"],
+      "nonnegative_integer_columns": ["quantity"]
+    },
+    "outputs": {
+      "DEMO_OUTPUT": {
+        "version": "demo-v1",
+        "columns": ["id", "name", "quantity"],
+        "nonnegative_integer_columns": ["quantity"]
+      }
+    }
+  }
+]

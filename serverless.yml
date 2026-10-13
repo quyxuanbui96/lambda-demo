@@ -86,6 +86,9 @@ package:
     - '!**'
     - 'src/**'
     - '!src/handlers/health.py'
+    - '!src/workflow/**'
+    - '!src/handlers/workflow_*.py'
+    - '!src/handlers/acquisition_worker.py'
     - '!**/__pycache__/**'
 
 functions:

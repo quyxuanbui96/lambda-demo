@@ -21,7 +21,14 @@
     "check-all": "yarn lint && yarn typecheck && yarn test",
     "package:dev": "node scripts/deploy.cjs -Task package -Stage dev",
     "deploy:dev": "node scripts/deploy.cjs -Task deploy -Stage dev",
-    "info:dev": "node scripts/deploy.cjs -Task info -Stage dev"
+    "info:dev": "node scripts/deploy.cjs -Task info -Stage dev",
+    "workflow:local": "python -m poetry run python scripts/workflow_local.py",
+    "workflow:migrate": "python -m poetry run python scripts/workflow_migrate.py",
+    "workflow:test": "python -m poetry run pytest tests/workflow --cov=src.workflow --cov-fail-under=80",
+    "workflow:package": "node scripts/deploy.cjs -Task package -Stage dev -Config serverless.workflow.yml",
+    "workflow:deploy": "node scripts/deploy.cjs -Task deploy -Stage dev -Config serverless.workflow.yml",
+    "workflow:info": "node scripts/deploy.cjs -Task info -Stage dev -Config serverless.workflow.yml",
+    "workflow:verify": "python -m poetry run python scripts/workflow_verify_package.py"
   },
   "devDependencies": {
     "serverless": "4.43.0",

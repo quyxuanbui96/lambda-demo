@@ -1,0 +1,5 @@
+organizationId,participantCode,insuranceYear,businessType,id,name,quantity
+org-demo,00001,2026,DEMO,1,Apple,10
+org-demo,00001,2026,DEMO,2,Orange,5
+org-demo,00002,2026,DEMO,3,Excluded participant,999
+org-other,00001,2026,DEMO,4,Excluded organization,999

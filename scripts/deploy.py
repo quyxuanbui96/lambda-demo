@@ -17,12 +17,28 @@ from scripts.local_env import ROOT, load_local_environment
 from src.common.config import load_settings
 
 
-def deploy(task: str, stage: str) -> None:
+def deploy(task: str, stage: str, configuration: str = "serverless.yml") -> None:
     if stage == "local" or re.fullmatch(r"[a-zA-Z0-9-]+", stage) is None:
         raise ValueError("Specify a deploy stage such as dev; local is reserved for offline use.")
 
     load_local_environment()
-    load_settings()
+    if configuration == "serverless.yml":
+        load_settings()
+    elif task == "deploy":
+        from src.workflow.config import load_workflow_settings
+        from src.workflow.errors import WorkflowError
+
+        os.environ["STAGE"] = stage
+        try:
+            load_workflow_settings()
+        except WorkflowError as error:
+            raise ValueError(error.message) from None
+        if not os.environ.get("WF_VPC_SUBNET_IDS") or not os.environ.get(
+            "WF_VPC_SECURITY_GROUP_IDS"
+        ):
+            raise ValueError(
+                "Configure workflow private-RDS VPC subnets and security groups first."
+            )
     os.environ["VIRTUAL_ENV"] = sys.prefix
     os.environ["PATH"] = str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]
     os.environ.setdefault("DOCKER_DEFAULT_PLATFORM", "linux/amd64")
@@ -39,6 +55,8 @@ def deploy(task: str, stage: str) -> None:
         raise ValueError("Node.js / Serverless not found. Run yarn install first.")
     command = [node, str(serverless)]
     options = ["--stage", stage, "--region", os.environ.get("AWS_REGION", "ap-southeast-2")]
+    if configuration != "serverless.yml":
+        options.extend(["--config", configuration])
 
     def run(args: list[str]) -> None:
         subprocess.run(args, cwd=ROOT, check=True)
@@ -58,9 +76,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-Task", choices=["package", "deploy", "info"], default="deploy")
     parser.add_argument("-Stage", default="dev")
+    parser.add_argument(
+        "-Config", choices=["serverless.yml", "serverless.workflow.yml"], default="serverless.yml"
+    )
     args = parser.parse_args()
     try:
-        deploy(args.Task, args.Stage)
+        deploy(args.Task, args.Stage, args.Config)
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

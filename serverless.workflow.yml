@@ -1,0 +1,218 @@
+service: ocr-file-workflow
+frameworkVersion: '4.43.0'
+custom:
+  authModeByStage:
+    local: bypass
+    dev: bypass
+  bucketName: ${env:WF_BUCKET, 'ocr-workflow-${aws:accountId}-${aws:region}-${sls:stage}'}
+  serverless-offline:
+    host: 127.0.0.1
+    httpPort: 3010
+    lambdaPort: 3012
+  pythonRequirements:
+    usePoetry: true
+    poetryWithGroups:
+      - workflow
+    dockerizePip: true
+    dockerImage: public.ecr.aws/sam/build-python3.14:latest-x86_64
+    dockerRunCmdExtraArgs: ${file(./scripts/deploy_config.cjs):dockerArgs}
+    slim: true
+    # psycopg discovers its version through dist-info; SQLAlchemy checks that version.
+    slimPatternsAppendDefaults: false
+    slimPatterns:
+      - '**/__pycache__*'
+      - '**/*.pyc'
+      - '**/*.pyo'
+    strip: false
+    requirePoetryLockFile: true
+provider:
+  name: aws
+  runtime: python3.14
+  architecture: x86_64
+  region: ${opt:region, env:AWS_REGION, 'ap-southeast-2'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 29
+  logRetentionInDays: 30
+  deploymentBucket:
+    name: ${env:WF_DEPLOYMENT_BUCKET}
+  environment:
+    STAGE: ${sls:stage}
+    WF_BUCKET: !Ref WorkflowBucket
+    WF_AUTH_MODE: ${env:WF_AUTH_MODE, self:custom.authModeByStage.${sls:stage}, 'authorizer'}
+    WF_DEV_IDENTITY: ${file(./scripts/workflow_config.cjs):identity}
+    WF_CONTRACTS_PATH: ${env:WF_CONTRACTS_PATH, 'examples/workflow/contracts.demo.json'}
+    WF_DATABASE_SECRET_ARN: ${env:WF_DATABASE_SECRET_ARN, ''}
+    WF_DATABASE_SSL_ROOT_CERT: certs/global-bundle.pem
+    WF_QUEUE_URL: !Ref AcquisitionQueue
+    WF_URL_TTL_SECONDS: ${env:WF_URL_TTL_SECONDS, '300'}
+    WF_MAX_FILE_BYTES: ${env:WF_MAX_FILE_BYTES, '10485760'}
+    WF_MAX_SOURCE_BYTES: ${env:WF_MAX_SOURCE_BYTES, '104857600'}
+    WF_TEMPORARY_RETENTION_SECONDS: ${env:WF_TEMPORARY_RETENTION_SECONDS, '86400'}
+    WF_POLL_INTERVAL_SECONDS: ${env:WF_POLL_INTERVAL_SECONDS, '3'}
+    POWERTOOLS_SERVICE_NAME: ocr-file-workflow
+package:
+  patterns:
+    - '!**'
+    - src/**
+    - '!src/common/**'
+    - '!src/csv_processing/**'
+    - '!src/handlers/api.py'
+    - '!src/handlers/s3_csv_import.py'
+    - '!src/handlers/health.py'
+    - examples/workflow/contracts*.json
+    - certs/*.pem
+    - '!**/__pycache__/**'
+functions:
+  health:
+    handler: src/handlers/health.handler
+    memorySize: 128
+    timeout: 5
+    package:
+      individually: true
+      patterns:
+        - '!src/**'
+        - '!examples/**'
+        - '!certs/**'
+        - src/__init__.py
+        - src/handlers/__init__.py
+        - src/handlers/health.py
+    events:
+      - http: {path: health, method: get}
+  workflowApi:
+    handler: src/handlers/workflow_api.handler
+    role: !GetAtt WorkflowApiRole.Arn
+    events:
+      - http: {path: session/context, method: get}
+      - http: {path: acquisitions, method: post}
+      - http: {path: 'acquisitions/{id}', method: get}
+      - http: {path: 'acquisitions/{id}/download-url', method: post}
+      - http: {path: transfers, method: post}
+      - http: {path: 'transfers/{id}', method: get}
+      - http: {path: 'transfers/{id}/upload-url', method: post}
+      - http: {path: 'transfers/{id}/complete', method: post}
+  acquisitionWorker:
+    handler: src/handlers/acquisition_worker.handler
+    role: !GetAtt WorkflowWorkerRole.Arn
+    memorySize: 1024
+    ephemeralStorageSize: 2048
+    timeout: 300
+    events:
+      - sqs:
+          arn: !GetAtt AcquisitionQueue.Arn
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+  workflowMaintenance:
+    handler: src/handlers/workflow_maintenance.handler
+    role: !GetAtt WorkflowMaintenanceRole.Arn
+    timeout: 120
+    events:
+      - schedule: rate(1 minute)
+plugins:
+  - serverless-offline
+  - ./scripts/normalize_package.cjs
+resources:
+  - extensions: ${file(./scripts/workflow_config.cjs):extensions}
+    Resources:
+      WorkflowBucket:
+        Type: AWS::S3::Bucket
+        DeletionPolicy: Retain
+        UpdateReplacePolicy: Retain
+        Properties:
+          BucketName: ${self:custom.bucketName}
+          VersioningConfiguration: {Status: Enabled}
+          PublicAccessBlockConfiguration:
+            BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true
+          BucketEncryption:
+            ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+          LifecycleConfiguration:
+            Rules:
+              - Id: temporary-fallback-cleanup
+                Status: Enabled
+                Prefix: workflow/temporary/
+                ExpirationInDays: 7
+                NoncurrentVersionExpiration: {NoncurrentDays: 7}
+      AcquisitionQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+          VisibilityTimeout: 1800
+          MessageRetentionPeriod: 1209600
+          SqsManagedSseEnabled: true
+          RedrivePolicy:
+            deadLetterTargetArn: !GetAtt AcquisitionDeadLetterQueue.Arn
+            maxReceiveCount: 5
+      AcquisitionDeadLetterQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+          MessageRetentionPeriod: 1209600
+          SqsManagedSseEnabled: true
+      AcquisitionDeadLetterAlarm:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+          Namespace: AWS/SQS
+          MetricName: ApproximateNumberOfMessagesVisible
+          Dimensions:
+            - Name: QueueName
+              Value: !GetAtt AcquisitionDeadLetterQueue.QueueName
+          Statistic: Maximum
+          Period: 60
+          EvaluationPeriods: 1
+          Threshold: 0
+          ComparisonOperator: GreaterThanThreshold
+          TreatMissingData: notBreaching
+      WorkflowApiErrorAlarm:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+          Namespace: OCRFileWorkflow
+          MetricName: APIServerErrors
+          Dimensions:
+            - Name: service
+              Value: workflow
+            - Name: Stage
+              Value: ${sls:stage}
+          Statistic: Sum
+          Period: 300
+          EvaluationPeriods: 1
+          Threshold: 0
+          ComparisonOperator: GreaterThanThreshold
+          TreatMissingData: notBreaching
+      AcquisitionFailureAlarm:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+          Namespace: OCRFileWorkflow
+          MetricName: AcquisitionFailures
+          Dimensions:
+            - Name: service
+              Value: workflow
+            - Name: Stage
+              Value: ${sls:stage}
+          Statistic: Sum
+          Period: 300
+          EvaluationPeriods: 1
+          Threshold: 0
+          ComparisonOperator: GreaterThanThreshold
+          TreatMissingData: notBreaching
+      TransferFailureAlarm:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+          Namespace: OCRFileWorkflow
+          MetricName: TransferFailures
+          Dimensions:
+            - Name: service
+              Value: workflow
+            - Name: Stage
+              Value: ${sls:stage}
+          Statistic: Sum
+          Period: 300
+          EvaluationPeriods: 1
+          Threshold: 0
+          ComparisonOperator: GreaterThanThreshold
+          TreatMissingData: notBreaching
+    Outputs:
+      WorkflowBucketName: {Value: !Ref WorkflowBucket}
+      WorkflowAcquisitionQueueUrl: {Value: !Ref AcquisitionQueue}
+  - Resources: ${file(./scripts/workflow_config.cjs):roles}
